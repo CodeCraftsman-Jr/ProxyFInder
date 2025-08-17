@@ -1,0 +1,12 @@
+{
+  "name": "proxy-finder-service",
+  "version": "1.0.0",
+  "description": "Daily proxy checker service that stores working proxies in Appwrite",
+  "main": "railway_service.py",
+  "scripts": {
+    "start": "python railway_service.py"
+  },
+  "engines": {
+    "python": "3.10.x"
+  }
+}

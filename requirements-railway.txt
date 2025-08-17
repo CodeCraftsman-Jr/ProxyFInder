@@ -1,0 +1,5 @@
+# Railway deployment requirements
+requests>=2.31.0
+python-socks>=2.3.0
+appwrite>=4.2.0
+schedule>=1.2.0
