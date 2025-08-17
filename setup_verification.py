@@ -9,6 +9,16 @@ import sys
 import requests
 from datetime import datetime
 
+# Try to load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("📄 Loaded environment variables from .env file")
+except ImportError:
+    print("💡 Tip: Install python-dotenv for .env file support: pip install python-dotenv")
+except:
+    pass
+
 def check_github_setup():
     """Check if we're in a GitHub repository"""
     print("🔍 Checking GitHub setup...")

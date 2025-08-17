@@ -26,14 +26,15 @@ class AppwriteProxyChecker:
         self.database_id = os.getenv('APPWRITE_DATABASE_ID')
         self.collection_id = os.getenv('APPWRITE_COLLECTION_ID')
         
-        # Test configuration
+        # Test configuration - Use a mix of simple and popular sites
         self.test_urls = [
-            'https://www.google.com',
-            'https://google.com',
-            'https://www.google.com/search?q=test'
+            'http://httpbin.org/get',          # Simple HTTP service
+            'https://api.ipify.org',           # Simple IP service
+            'https://www.google.com',          # Google
+            'https://www.youtube.com',         # YouTube
         ]
-        self.timeout = 10
-        self.max_workers = 50
+        self.timeout = 15  # Increased timeout for popular sites
+        self.max_workers = 25  # Reduced for better success rate
         
         # Statistics
         self.stats = {
@@ -81,8 +82,9 @@ class AppwriteProxyChecker:
             else:
                 return False, f"Unknown proxy type: {proxy_type}"
 
-            # Test proxy with multiple URLs
-            for test_url in self.test_urls:
+            # Test proxy with multiple URLs - try each one
+            successful_urls = []
+            for i, test_url in enumerate(self.test_urls, 1):
                 try:
                     response = requests.get(
                         test_url,
@@ -90,17 +92,22 @@ class AppwriteProxyChecker:
                         timeout=self.timeout,
                         allow_redirects=True,
                         headers={
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                         }
                     )
                     
                     if response.status_code == 200:
-                        return True, f"Working - Status: {response.status_code}"
+                        site_name = test_url.split('//')[1].split('/')[0]
+                        successful_urls.append(site_name)
                         
-                except requests.exceptions.RequestException:
+                        # Return success after first working URL for speed
+                        return True, f"Works with {site_name} ({response.status_code})"
+                        
+                except requests.exceptions.RequestException as e:
+                    # Continue to next URL
                     continue
                     
-            return False, "Failed all test URLs"
+            return False, f"Failed all sites: {', '.join([url.split('//')[1].split('/')[0] for url in self.test_urls])}"
             
         except Exception as e:
             return False, f"Error: {str(e)}"
@@ -175,18 +182,23 @@ class AppwriteProxyChecker:
                         # Save to Appwrite
                         self.save_to_appwrite(proxy, proxy_type, round(response_time, 2))
                         
-                        print(f"✓ {proxy} - {message} ({response_time:.2f}s)")
+                        print(f"✅ {proxy} - {message} ({response_time:.2f}s)")
                     else:
                         self.stats['failed'] += 1
-                        print(f"✗ {proxy} - {message}")
+                        # Only show failed proxies occasionally to reduce noise
+                        if i % 20 == 0:
+                            print(f"❌ {proxy} - {message}")
                         
                 except Exception as e:
                     self.stats['failed'] += 1
-                    print(f"✗ {proxy} - Exception: {e}")
+                    # Only show exceptions occasionally
+                    if i % 20 == 0:
+                        print(f"❌ {proxy} - Exception: {e}")
                 
-                # Progress update
-                if i % 10 == 0:
-                    print(f"Progress: {i}/{len(proxies)} tested")
+                # Enhanced progress update
+                if i % 25 == 0:
+                    success_rate = (self.stats['working'] / i * 100) if i > 0 else 0
+                    print(f"📊 Progress: {i}/{len(proxies)} tested | Working: {self.stats['working']} | Success Rate: {success_rate:.1f}%")
         
         return working_proxies
 
