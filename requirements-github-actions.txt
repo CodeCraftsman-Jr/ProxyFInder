@@ -1,6 +1,6 @@
 # For GitHub Actions
-requests>=2.31.0
-python-socks>=2.3.0
+requests[socks]>=2.31.0
+PySocks>=1.7.1
 appwrite>=4.2.0
 
 # For local development (optional)

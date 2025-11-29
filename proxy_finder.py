@@ -12,6 +12,12 @@ import os
 from datetime import datetime
 from typing import List, Dict, Tuple
 import json
+import socks
+import socket
+import urllib3
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class ProxyFinder:
     def __init__(self):
@@ -22,9 +28,9 @@ class ProxyFinder:
             'socks5': f"{self.base_url}/socks5.txt"
         }
         self.test_urls = [
-            "https://www.google.com",
-            "https://google.com",
-            "https://www.google.com/search?q=test"
+            "http://httpbin.org/ip",
+            "http://ifconfig.me/ip",
+            "https://api.ipify.org?format=json"
         ]
         self.working_proxies = {'http': [], 'socks4': [], 'socks5': []}
         self.timeout = 10  # seconds
@@ -46,11 +52,11 @@ class ProxyFinder:
             return []
     
     def test_proxy(self, proxy: str, proxy_type: str) -> Tuple[bool, str, float]:
-        """Test a single proxy against Google sites"""
+        """Test a single proxy against test sites"""
         try:
             start_time = time.time()
             
-            # Format proxy for requests
+            # Format proxy for requests with proper SOCKS support
             if proxy_type == 'http':
                 proxy_dict = {
                     'http': f'http://{proxy}',
@@ -67,17 +73,19 @@ class ProxyFinder:
                     'https': f'socks5://{proxy}'
                 }
             
-            # Test against Google
+            # Test against multiple URLs
             for test_url in self.test_urls:
                 try:
                     response = requests.get(
                         test_url,
                         proxies=proxy_dict,
                         timeout=self.timeout,
-                        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                        verify=False  # Skip SSL verification for faster testing
                     )
                     
-                    if response.status_code == 200 and 'google' in response.text.lower():
+                    # Check if request was successful
+                    if response.status_code == 200:
                         response_time = time.time() - start_time
                         return True, proxy, response_time
                         

@@ -1,10 +1,12 @@
 """
 Appwrite Function to clean up old proxy records
 Keeps only the last 2 days of data and deletes older records
+Uses REST API directly to avoid SDK compatibility issues
 """
 
 import os
 import json
+import requests
 from datetime import datetime, timedelta
 
 
@@ -14,20 +16,7 @@ def main(context):
     Runs every 2 days to delete records older than 2 days
     """
     
-    # Import Appwrite SDK inside the function
-    try:
-        from appwrite.client import Client
-        from appwrite.services.databases import Databases
-        from appwrite.query import Query
-    except ImportError as e:
-        context.error(f"Failed to import Appwrite SDK: {str(e)}")
-        return context.res.json({
-            "success": False,
-            "error": f"Import error: {str(e)}"
-        }, 500)
-    
-    # Initialize Appwrite client
-    client = Client()
+    context.log("🚀 Starting cleanup process...")
     
     # Get environment variables
     endpoint = os.environ.get('APPWRITE_FUNCTION_API_ENDPOINT', 'https://fra.cloud.appwrite.io/v1')
@@ -41,11 +30,8 @@ def main(context):
             "error": "API key not configured"
         }, 500)
     
-    client.set_endpoint(endpoint)
-    client.set_project(project_id)
-    client.set_key(api_key)
-    
-    databases = Databases(client)
+    context.log(f"Endpoint: {endpoint}")
+    context.log(f"Project ID: {project_id}")
     
     # Database and collection IDs
     database_id = "68a227fb00180c4a541a"  # ProxyDatabase
@@ -63,79 +49,65 @@ def main(context):
     total_checked = 0
     errors = []
     
+    # Headers for API requests
+    headers = {
+        'X-Appwrite-Project': project_id,
+        'X-Appwrite-Key': api_key,
+        'Content-Type': 'application/json'
+    }
+    
     try:
-        # Fetch all documents (paginated)
-        offset = 0
-        limit = 100
-        has_more = True
+        # Fetch documents using REST API directly
+        list_url = f"{endpoint}/databases/{database_id}/collections/{collection_id}/documents"
         
-        while has_more:
-            try:
-                # Get documents
-                response = databases.list_documents(
-                    database_id=database_id,
-                    collection_id=collection_id,
-                    queries=[
-                        Query.limit(limit),
-                        Query.offset(offset)
-                    ]
-                )
-                
-                documents = response['documents']
-                total_in_batch = len(documents)
-                
-                if total_in_batch == 0:
-                    has_more = False
-                    break
-                
-                context.log(f"Processing batch: {total_in_batch} documents (offset: {offset})")
-                
-                # Process each document
-                for doc in documents:
-                    total_checked += 1
+        try:
+            response = requests.get(list_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            documents = data.get('documents', [])
+            total_checked = len(documents)
+            
+            context.log(f"Found {total_checked} documents to check")
+            
+            # Process each document
+            for doc in documents:
+                try:
+                    # Parse the tested_at timestamp
+                    tested_at_str = doc.get('tested_at', '')
                     
-                    try:
-                        # Parse the tested_at timestamp
-                        tested_at_str = doc.get('tested_at', '')
+                    # Handle different timestamp formats
+                    if 'T' in tested_at_str:
+                        # ISO format - strip microseconds and timezone
+                        tested_at_str_clean = tested_at_str.split('.')[0] if '.' in tested_at_str else tested_at_str
+                        tested_at_str_clean = tested_at_str_clean.replace('Z', '')
+                        tested_at = datetime.fromisoformat(tested_at_str_clean)
+                    else:
+                        # Try parsing as string timestamp
+                        tested_at = datetime.strptime(tested_at_str, '%Y-%m-%d %H:%M:%S')
+                    
+                    # Check if older than 2 days
+                    if tested_at < cutoff_date:
+                        # Delete the document using REST API
+                        delete_url = f"{list_url}/{doc['$id']}"
+                        delete_response = requests.delete(delete_url, headers=headers, timeout=30)
                         
-                        # Handle different timestamp formats
-                        if 'T' in tested_at_str:
-                            # ISO format
-                            tested_at = datetime.fromisoformat(tested_at_str.replace('Z', '+00:00'))
-                        else:
-                            # Try parsing as string timestamp
-                            tested_at = datetime.strptime(tested_at_str, '%Y-%m-%d %H:%M:%S')
-                        
-                        # Check if older than 2 days
-                        if tested_at < cutoff_date:
-                            # Delete the document
-                            databases.delete_document(
-                                database_id=database_id,
-                                collection_id=collection_id,
-                                document_id=doc['$id']
-                            )
+                        if delete_response.status_code in [200, 204]:
                             deleted_count += 1
-                            
                             if deleted_count % 10 == 0:
                                 context.log(f"Deleted {deleted_count} old records so far...")
-                    
-                    except Exception as e:
-                        error_msg = f"Error processing document {doc.get('$id', 'unknown')}: {str(e)}"
-                        context.error(error_msg)
-                        errors.append(error_msg)
-                        continue
+                        else:
+                            errors.append(f"Failed to delete {doc['$id']}: HTTP {delete_response.status_code}")
                 
-                # Move to next batch
-                offset += limit
-                
-                # If we got fewer documents than the limit, we've reached the end
-                if total_in_batch < limit:
-                    has_more = False
+                except Exception as e:
+                    error_msg = f"Error processing document {doc.get('$id', 'unknown')}: {str(e)}"
+                    context.error(error_msg)
+                    errors.append(error_msg)
+                    continue
             
-            except Exception as e:
-                context.error(f"Error fetching batch at offset {offset}: {str(e)}")
-                errors.append(f"Batch error at offset {offset}: {str(e)}")
-                has_more = False
+        except requests.exceptions.RequestException as e:
+            context.error(f"Error fetching documents: {str(e)}")
+            errors.append(f"Fetch error: {str(e)}")
         
         # Generate summary
         summary = {

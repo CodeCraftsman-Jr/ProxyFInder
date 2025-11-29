@@ -13,6 +13,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from appwrite.client import Client
 from appwrite.services.databases import Databases
 from appwrite.id import ID
+import urllib3
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class AppwriteProxyChecker:
     def __init__(self):
@@ -29,12 +33,11 @@ class AppwriteProxyChecker:
         # Get proxy type from environment variable (for parallel execution)
         self.proxy_type_filter = os.getenv('PROXY_TYPE', None)  # http, socks4, socks5, or None for all
         
-        # Test configuration - Use a mix of simple and popular sites
+        # Test configuration - Use simple HTTP endpoints that work with SOCKS
         self.test_urls = [
-            'http://httpbin.org/get',          # Simple HTTP service
-            'https://api.ipify.org',           # Simple IP service
-            'https://www.google.com',          # Google
-            'https://www.youtube.com',         # YouTube
+            'http://httpbin.org/ip',           # Simple IP return
+            'http://ifconfig.me/ip',           # Simple IP service
+            'https://api.ipify.org?format=json',  # JSON IP response
         ]
         self.timeout = 15  # Increased timeout for popular sites
         self.max_workers = 100  # Increased for faster parallel processing
@@ -98,6 +101,7 @@ class AppwriteProxyChecker:
                         proxies=proxy_dict,
                         timeout=self.timeout,
                         allow_redirects=True,
+                        verify=False,  # Skip SSL verification for speed
                         headers={
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                         }
