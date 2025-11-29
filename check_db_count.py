@@ -36,15 +36,14 @@ while True:
     query_limit = json_module.dumps({"method":"limit","values":[limit]})
     query_offset = json_module.dumps({"method":"offset","values":[offset]})
     
-    # URL encode the queries
-    encoded_limit = quote(query_limit)
-    encoded_offset = quote(query_offset)
-    
-    # Construct URL with multiple queries[] parameters
-    full_url = f"{url}?queries[]={encoded_limit}&queries[]={encoded_offset}"
+    # Use params to let requests handle URL encoding
+    params = [
+        ('queries[]', query_limit),
+        ('queries[]', query_offset)
+    ]
     
     print(f"Fetching page {page} (offset: {offset}, limit: {limit})...")
-    response = requests.get(full_url, headers=headers)
+    response = requests.get(url, headers=headers, params=params)
     
     if response.status_code != 200:
         print(f"Error: HTTP {response.status_code}")

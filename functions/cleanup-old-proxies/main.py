@@ -72,14 +72,13 @@ def main(context):
                 query_limit = json.dumps({"method":"limit","values":[limit]})
                 query_offset = json.dumps({"method":"offset","values":[offset]})
                 
-                # URL encode the queries
-                encoded_limit = quote(query_limit)
-                encoded_offset = quote(query_offset)
+                # Use params to let requests handle URL encoding
+                params = [
+                    ('queries[]', query_limit),
+                    ('queries[]', query_offset)
+                ]
                 
-                # Construct URL with multiple queries[] parameters
-                paginated_url = f"{list_url}?queries[]={encoded_limit}&queries[]={encoded_offset}"
-                
-                response = requests.get(paginated_url, headers=headers, timeout=30)
+                response = requests.get(list_url, headers=headers, params=params, timeout=30)
                 response.raise_for_status()
                 
                 data = response.json()
