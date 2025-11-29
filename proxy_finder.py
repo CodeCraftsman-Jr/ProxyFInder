@@ -15,7 +15,7 @@ import json
 
 class ProxyFinder:
     def __init__(self):
-        self.base_url = "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master"
+        self.base_url = "https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master"
         self.proxy_files = {
             'http': f"{self.base_url}/http.txt",
             'socks4': f"{self.base_url}/socks4.txt", 
@@ -179,7 +179,7 @@ class ProxyFinder:
                 for proxy_type, proxies in self.working_proxies.items()
             },
             'fastest_proxies': {},
-            'source': 'https://github.com/TheSpeedX/PROXY-List'
+            'source': 'https://github.com/TheSpeedX/SOCKS-List'
         }
         
         # Find fastest proxies for each type
@@ -202,7 +202,7 @@ class ProxyFinder:
         print("=" * 60)
         print("🔍 PROXY FINDER - Finding Working Proxies")
         print("=" * 60)
-        print(f"Source: https://github.com/TheSpeedX/PROXY-List")
+        print(f"Source: https://github.com/TheSpeedX/SOCKS-List")
         print(f"Testing against: {', '.join(self.test_urls)}")
         print(f"Timeout: {self.timeout}s per proxy")
         print(f"Max concurrent threads: {self.max_workers}")

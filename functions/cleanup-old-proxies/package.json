@@ -1,0 +1,10 @@
+{
+  "name": "cleanup-old-proxies",
+  "version": "1.0.0",
+  "description": "Appwrite function to clean up proxy records older than 2 days",
+  "main": "main.py",
+  "scripts": {},
+  "keywords": ["appwrite", "cleanup", "cron"],
+  "author": "",
+  "license": "MIT"
+}
