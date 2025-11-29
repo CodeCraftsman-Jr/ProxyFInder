@@ -8,6 +8,7 @@ import os
 import json
 import requests
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 
 def main(context):
@@ -71,8 +72,12 @@ def main(context):
                 query_limit = json.dumps({"method":"limit","values":[limit]})
                 query_offset = json.dumps({"method":"offset","values":[offset]})
                 
+                # URL encode the queries
+                encoded_limit = quote(query_limit)
+                encoded_offset = quote(query_offset)
+                
                 # Construct URL with multiple queries[] parameters
-                paginated_url = f"{list_url}?queries[]={query_limit}&queries[]={query_offset}"
+                paginated_url = f"{list_url}?queries[]={encoded_limit}&queries[]={encoded_offset}"
                 
                 response = requests.get(paginated_url, headers=headers, timeout=30)
                 response.raise_for_status()

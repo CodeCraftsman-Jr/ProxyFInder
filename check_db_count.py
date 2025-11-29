@@ -4,6 +4,7 @@ Check total document count in Appwrite database
 """
 
 import requests
+from urllib.parse import quote
 
 # Configuration
 endpoint = "https://fra.cloud.appwrite.io/v1"
@@ -35,8 +36,12 @@ while True:
     query_limit = json_module.dumps({"method":"limit","values":[limit]})
     query_offset = json_module.dumps({"method":"offset","values":[offset]})
     
+    # URL encode the queries
+    encoded_limit = quote(query_limit)
+    encoded_offset = quote(query_offset)
+    
     # Construct URL with multiple queries[] parameters
-    full_url = f"{url}?queries[]={query_limit}&queries[]={query_offset}"
+    full_url = f"{url}?queries[]={encoded_limit}&queries[]={encoded_offset}"
     
     print(f"Fetching page {page} (offset: {offset}, limit: {limit})...")
     response = requests.get(full_url, headers=headers)
