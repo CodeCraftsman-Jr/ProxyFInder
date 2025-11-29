@@ -72,42 +72,72 @@ def main(context):
                 query_limit = json.dumps({"method":"limit","values":[limit]})
                 query_offset = json.dumps({"method":"offset","values":[offset]})
                 
+                context.log(f"Building queries - limit: {limit}, offset: {offset}")
+                context.log(f"Query limit JSON: {query_limit}")
+                context.log(f"Query offset JSON: {query_offset}")
+                
                 # Use params to let requests handle URL encoding
                 params = [
                     ('queries[]', query_limit),
                     ('queries[]', query_offset)
                 ]
                 
+                context.log(f"Making request to: {list_url}")
+                context.log(f"With params: {params}")
+                
                 response = requests.get(list_url, headers=headers, params=params, timeout=30)
+                
+                context.log(f"Response status: {response.status_code}")
+                context.log(f"Response URL: {response.url}")
+                
                 response.raise_for_status()
                 
                 data = response.json()
                 documents = data.get('documents', [])
+                total = data.get('total', 0)
+                
+                context.log(f"✅ Successfully fetched batch")
+                context.log(f"   Documents in this batch: {len(documents)}")
+                context.log(f"   Server reports total: {total}")
+                context.log(f"   Total fetched so far: {len(all_documents) + len(documents)}")
                 
                 if not documents:
+                    context.log("No more documents found - breaking pagination loop")
                     break  # No more documents
                 
                 all_documents.extend(documents)
-                context.log(f"Fetched {len(documents)} documents (offset: {offset}, total so far: {len(all_documents)})")
+                context.log(f"Added {len(documents)} documents to collection")
                 
                 # If we got fewer documents than the limit, we've reached the end
                 if len(documents) < limit:
+                    context.log(f"Got fewer documents ({len(documents)}) than limit ({limit}) - reached end")
                     break
                 
                 offset += limit
+                context.log(f"Moving to next batch with offset: {offset}")
+                context.log("="*50)
                 
             except Exception as e:
-                context.error(f"Error fetching page at offset {offset}: {str(e)}")
+                context.error(f"❌ Error fetching page at offset {offset}: {str(e)}")
+                context.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                context.error(f"Traceback: {traceback.format_exc()}")
                 break
         
         total_checked = len(all_documents)
+        context.log(f"📊 Pagination complete!")
         context.log(f"Total documents fetched: {total_checked}")
         
         # Process each document
-        for doc in all_documents:
+        context.log(f"🔄 Starting to process {total_checked} documents...")
+        for i, doc in enumerate(all_documents, 1):
                 try:
+                    if i % 100 == 0:
+                        context.log(f"Processing document {i}/{total_checked}...")
+                    
                     # Parse the tested_at timestamp
                     tested_at_str = doc.get('tested_at', '')
+                    doc_id = doc.get('$id', 'unknown')
                     
                     # Handle different timestamp formats
                     if 'T' in tested_at_str:
@@ -122,18 +152,21 @@ def main(context):
                     # Check if older than 2 days
                     if tested_at < cutoff_date:
                         # Delete the document using REST API
-                        delete_url = f"{list_url}/{doc['$id']}"
+                        doc_id = doc['$id']
+                        delete_url = f"{list_url}/{doc_id}"
                         delete_response = requests.delete(delete_url, headers=headers, timeout=30)
                         
                         if delete_response.status_code in [200, 204]:
                             deleted_count += 1
                             if deleted_count % 10 == 0:
-                                context.log(f"Deleted {deleted_count} old records so far...")
+                                context.log(f"🗑️  Deleted {deleted_count} old records so far...")
                         else:
-                            errors.append(f"Failed to delete {doc['$id']}: HTTP {delete_response.status_code}")
+                            error_msg = f"Failed to delete {doc_id}: HTTP {delete_response.status_code}"
+                            context.error(error_msg)
+                            errors.append(error_msg)
                 
                 except Exception as e:
-                    error_msg = f"Error processing document {doc.get('$id', 'unknown')}: {str(e)}"
+                    error_msg = f"Error processing document {doc_id}: {str(e)}"
                     context.error(error_msg)
                     errors.append(error_msg)
                     continue
@@ -150,13 +183,19 @@ def main(context):
             "errors": errors[:10] if errors else []  # Include first 10 errors if any
         }
         
-        context.log(f"Cleanup completed successfully!")
-        context.log(f"Total documents checked: {total_checked}")
-        context.log(f"Documents deleted: {deleted_count}")
-        context.log(f"Documents retained: {total_checked - deleted_count}")
+        context.log("="*60)
+        context.log(f"✅ Cleanup completed successfully!")
+        context.log(f"📋 Summary:")
+        context.log(f"   Total documents checked: {total_checked}")
+        context.log(f"   Documents deleted: {deleted_count}")
+        context.log(f"   Documents retained: {total_checked - deleted_count}")
+        context.log(f"   Errors encountered: {len(errors)}")
+        context.log("="*60)
         
         if errors:
-            context.log(f"Encountered {len(errors)} errors during cleanup")
+            context.log(f"⚠️  Encountered {len(errors)} errors during cleanup")
+            for i, err in enumerate(errors[:5], 1):
+                context.error(f"  Error {i}: {err}")
         
         return context.res.json(summary)
     
@@ -169,5 +208,11 @@ def main(context):
             "documents_deleted": deleted_count
         }
         
-        context.error(f"Fatal error during cleanup: {str(e)}")
+        context.error("="*60)
+        context.error(f"❌ Fatal error during cleanup: {str(e)}")
+        context.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        context.error(f"Full traceback:")
+        context.error(traceback.format_exc())
+        context.error("="*60)
         return context.res.json(error_summary, 500)
