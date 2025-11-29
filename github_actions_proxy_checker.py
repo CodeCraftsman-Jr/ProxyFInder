@@ -26,6 +26,9 @@ class AppwriteProxyChecker:
         self.database_id = os.getenv('APPWRITE_DATABASE_ID')
         self.collection_id = os.getenv('APPWRITE_COLLECTION_ID')
         
+        # Get proxy type from environment variable (for parallel execution)
+        self.proxy_type_filter = os.getenv('PROXY_TYPE', None)  # http, socks4, socks5, or None for all
+        
         # Test configuration - Use a mix of simple and popular sites
         self.test_urls = [
             'http://httpbin.org/get',          # Simple HTTP service
@@ -34,7 +37,7 @@ class AppwriteProxyChecker:
             'https://www.youtube.com',         # YouTube
         ]
         self.timeout = 15  # Increased timeout for popular sites
-        self.max_workers = 25  # Reduced for better success rate
+        self.max_workers = 100  # Increased for faster parallel processing
         
         # Statistics
         self.stats = {
@@ -44,10 +47,14 @@ class AppwriteProxyChecker:
             'start_time': datetime.now(),
             'proxy_types': {}
         }
+        
+        if self.proxy_type_filter:
+            print(f"🎯 Running in parallel mode: Testing only {self.proxy_type_filter.upper()} proxies")
 
     def fetch_proxy_list(self, proxy_type):
         """Fetch proxy list from GitHub repository"""
-        url = f"https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/{proxy_type}.txt"
+        # Updated to use SOCKS-List repository
+        url = f"https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/{proxy_type}.txt"
         try:
             print(f"Fetching {proxy_type} proxies from GitHub...")
             response = requests.get(url, timeout=30)
@@ -205,12 +212,18 @@ class AppwriteProxyChecker:
     def run(self):
         """Main execution function"""
         print("🚀 Starting GitHub Actions Proxy Checker with Appwrite Integration")
+        print(f"Source: https://github.com/TheSpeedX/SOCKS-List")
         print(f"Test URLs: {', '.join(self.test_urls)}")
         print(f"Timeout: {self.timeout}s")
         print(f"Max workers: {self.max_workers}")
         print("-" * 60)
         
-        proxy_types = ['http', 'socks4', 'socks5']
+        # Determine which proxy types to test
+        if self.proxy_type_filter:
+            proxy_types = [self.proxy_type_filter]
+        else:
+            proxy_types = ['http', 'socks4', 'socks5']
+        
         all_working_proxies = {}
         
         for proxy_type in proxy_types:

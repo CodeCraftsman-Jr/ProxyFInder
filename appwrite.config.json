@@ -103,5 +103,22 @@
             ],
             "indexes": []
         }
+    ],
+    "functions": [
+        {
+            "$id": "cleanup-old-proxies",
+            "name": "cleanup-old-proxies",
+            "runtime": "python-3.12",
+            "execute": ["any"],
+            "events": [],
+            "schedule": "0 0 */2 * *",
+            "timeout": 300,
+            "enabled": true,
+            "logging": true,
+            "entrypoint": "main.py",
+            "commands": "pip install -r requirements.txt",
+            "path": "functions/cleanup-old-proxies",
+            "ignore": [".git", ".vscode", "__pycache__", "*.pyc"]
+        }
     ]
 }

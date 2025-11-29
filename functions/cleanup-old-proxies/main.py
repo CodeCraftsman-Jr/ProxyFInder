@@ -6,9 +6,6 @@ Keeps only the last 2 days of data and deletes older records
 import os
 import json
 from datetime import datetime, timedelta
-from appwrite.client import Client
-from appwrite.services.databases import Databases
-from appwrite.query import Query
 
 
 def main(context):
@@ -17,11 +14,36 @@ def main(context):
     Runs every 2 days to delete records older than 2 days
     """
     
+    # Import Appwrite SDK inside the function
+    try:
+        from appwrite.client import Client
+        from appwrite.services.databases import Databases
+        from appwrite.query import Query
+    except ImportError as e:
+        context.error(f"Failed to import Appwrite SDK: {str(e)}")
+        return context.res.json({
+            "success": False,
+            "error": f"Import error: {str(e)}"
+        }, 500)
+    
     # Initialize Appwrite client
     client = Client()
-    client.set_endpoint(os.environ.get('APPWRITE_FUNCTION_API_ENDPOINT', 'https://fra.cloud.appwrite.io/v1'))
-    client.set_project(os.environ.get('APPWRITE_FUNCTION_PROJECT_ID'))
-    client.set_key(context.req.headers.get('x-appwrite-key', ''))
+    
+    # Get environment variables
+    endpoint = os.environ.get('APPWRITE_FUNCTION_API_ENDPOINT', 'https://fra.cloud.appwrite.io/v1')
+    project_id = os.environ.get('APPWRITE_FUNCTION_PROJECT_ID')
+    api_key = os.environ.get('APPWRITE_API_KEY', '')
+    
+    if not api_key:
+        context.error("APPWRITE_API_KEY environment variable is not set")
+        return context.res.json({
+            "success": False,
+            "error": "API key not configured"
+        }, 500)
+    
+    client.set_endpoint(endpoint)
+    client.set_project(project_id)
+    client.set_key(api_key)
     
     databases = Databases(client)
     

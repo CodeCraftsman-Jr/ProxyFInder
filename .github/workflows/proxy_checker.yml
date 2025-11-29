@@ -1,4 +1,4 @@
-name: Daily Proxy Checker
+name: Daily Proxy Checker (Parallel)
 
 on:
   schedule:
@@ -7,7 +7,8 @@ on:
   workflow_dispatch: # Allow manual triggering
 
 jobs:
-  check-proxies:
+  # Job 1: Check HTTP Proxies
+  check-http-proxies:
     runs-on: ubuntu-latest
     
     steps:
@@ -17,24 +18,148 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.11'
+        cache: 'pip'
         
     - name: Install dependencies
       run: |
-        pip install requests python-socks appwrite
+        pip install -r requirements-github-actions.txt
         
-    - name: Run proxy checker
+    - name: Run HTTP proxy checker
       env:
         APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
         APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
         APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
         APPWRITE_DATABASE_ID: ${{ secrets.APPWRITE_DATABASE_ID }}
         APPWRITE_COLLECTION_ID: ${{ secrets.APPWRITE_COLLECTION_ID }}
+        PROXY_TYPE: http
       run: python github_actions_proxy_checker.py
       
-    - name: Upload working proxies as artifact
+    - name: Upload HTTP proxies as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: working-http-proxies-${{ github.run_number }}
+        path: working_proxies/working_http_*
+        retention-days: 7
+
+  # Job 2: Check SOCKS4 Proxies
+  check-socks4-proxies:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements-github-actions.txt
+        
+    - name: Run SOCKS4 proxy checker
+      env:
+        APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
+        APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
+        APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+        APPWRITE_DATABASE_ID: ${{ secrets.APPWRITE_DATABASE_ID }}
+        APPWRITE_COLLECTION_ID: ${{ secrets.APPWRITE_COLLECTION_ID }}
+        PROXY_TYPE: socks4
+      run: python github_actions_proxy_checker.py
+      
+    - name: Upload SOCKS4 proxies as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: working-socks4-proxies-${{ github.run_number }}
+        path: working_proxies/working_socks4_*
+        retention-days: 7
+
+  # Job 3: Check SOCKS5 Proxies
+  check-socks5-proxies:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements-github-actions.txt
+        
+    - name: Run SOCKS5 proxy checker
+      env:
+        APPWRITE_ENDPOINT: ${{ secrets.APPWRITE_ENDPOINT }}
+        APPWRITE_PROJECT_ID: ${{ secrets.APPWRITE_PROJECT_ID }}
+        APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+        APPWRITE_DATABASE_ID: ${{ secrets.APPWRITE_DATABASE_ID }}
+        APPWRITE_COLLECTION_ID: ${{ secrets.APPWRITE_COLLECTION_ID }}
+        PROXY_TYPE: socks5
+      run: python github_actions_proxy_checker.py
+      
+    - name: Upload SOCKS5 proxies as artifact
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: working-socks5-proxies-${{ github.run_number }}
+        path: working_proxies/working_socks5_*
+        retention-days: 7
+
+  # Job 4: Combine results and generate summary
+  combine-results:
+    runs-on: ubuntu-latest
+    needs: [check-http-proxies, check-socks4-proxies, check-socks5-proxies]
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: all-proxies
+        
+    - name: List downloaded artifacts
+      run: |
+        echo "📦 Downloaded artifacts:"
+        ls -R all-proxies/
+        
+    - name: Generate combined summary
+      run: |
+        echo "# 📊 Proxy Checker Summary - Run #${{ github.run_number }}" > summary.md
+        echo "" >> summary.md
+        echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> summary.md
+        echo "" >> summary.md
+        echo "## Results by Type" >> summary.md
+        echo "" >> summary.md
+        
+        for type in http socks4 socks5; do
+          if [ -f "all-proxies/working-${type}-proxies-${{ github.run_number }}/working_${type}_proxies.txt" ]; then
+            count=$(wc -l < "all-proxies/working-${type}-proxies-${{ github.run_number }}/working_${type}_proxies.txt" || echo "0")
+            echo "- **${type^^}**: $count working proxies" >> summary.md
+          else
+            echo "- **${type^^}**: 0 working proxies" >> summary.md
+          fi
+        done
+        
+        echo "" >> summary.md
+        echo "---" >> summary.md
+        echo "Generated by GitHub Actions" >> summary.md
+        
+        cat summary.md
+        cat summary.md >> $GITHUB_STEP_SUMMARY
+        
+    - name: Upload combined summary
       uses: actions/upload-artifact@v4
       with:
-        name: working-proxies-${{ github.run_number }}
-        path: working_proxies/
-        retention-days: 7
+        name: summary-${{ github.run_number }}
+        path: summary.md
+        retention-days: 30
