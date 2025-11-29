@@ -57,21 +57,50 @@ def main(context):
     }
     
     try:
-        # Fetch documents using REST API directly
+        # Fetch ALL documents using REST API with pagination
         list_url = f"{endpoint}/databases/{database_id}/collections/{collection_id}/documents"
         
-        try:
-            response = requests.get(list_url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            documents = data.get('documents', [])
-            total_checked = len(documents)
-            
-            context.log(f"Found {total_checked} documents to check")
-            
-            # Process each document
-            for doc in documents:
+        all_documents = []
+        offset = 0
+        limit = 100  # Max per page
+        
+        # Fetch all documents with pagination
+        while True:
+            try:
+                # Add pagination parameters using proper Appwrite REST API query format
+                query_limit = json.dumps({"method":"limit","values":[limit]})
+                query_offset = json.dumps({"method":"offset","values":[offset]})
+                
+                # Construct URL with multiple queries[] parameters
+                paginated_url = f"{list_url}?queries[]={query_limit}&queries[]={query_offset}"
+                
+                response = requests.get(paginated_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                data = response.json()
+                documents = data.get('documents', [])
+                
+                if not documents:
+                    break  # No more documents
+                
+                all_documents.extend(documents)
+                context.log(f"Fetched {len(documents)} documents (offset: {offset}, total so far: {len(all_documents)})")
+                
+                # If we got fewer documents than the limit, we've reached the end
+                if len(documents) < limit:
+                    break
+                
+                offset += limit
+                
+            except Exception as e:
+                context.error(f"Error fetching page at offset {offset}: {str(e)}")
+                break
+        
+        total_checked = len(all_documents)
+        context.log(f"Total documents fetched: {total_checked}")
+        
+        # Process each document
+        for doc in all_documents:
                 try:
                     # Parse the tested_at timestamp
                     tested_at_str = doc.get('tested_at', '')
@@ -104,10 +133,6 @@ def main(context):
                     context.error(error_msg)
                     errors.append(error_msg)
                     continue
-            
-        except requests.exceptions.RequestException as e:
-            context.error(f"Error fetching documents: {str(e)}")
-            errors.append(f"Fetch error: {str(e)}")
         
         # Generate summary
         summary = {
