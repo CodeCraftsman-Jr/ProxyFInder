@@ -130,6 +130,10 @@ def main(context):
         
         # Process each document
         context.log(f"🔄 Starting to process {total_checked} documents...")
+        
+        # Collect documents to delete
+        docs_to_delete = []
+        
         for i, doc in enumerate(all_documents, 1):
                 try:
                     if i % 100 == 0:
@@ -151,25 +155,59 @@ def main(context):
                     
                     # Check if older than 2 days
                     if tested_at < cutoff_date:
-                        # Delete the document using REST API
-                        doc_id = doc['$id']
-                        delete_url = f"{list_url}/{doc_id}"
-                        delete_response = requests.delete(delete_url, headers=headers, timeout=30)
-                        
-                        if delete_response.status_code in [200, 204]:
-                            deleted_count += 1
-                            if deleted_count % 10 == 0:
-                                context.log(f"🗑️  Deleted {deleted_count} old records so far...")
-                        else:
-                            error_msg = f"Failed to delete {doc_id}: HTTP {delete_response.status_code}"
-                            context.error(error_msg)
-                            errors.append(error_msg)
+                        docs_to_delete.append(doc_id)
                 
                 except Exception as e:
                     error_msg = f"Error processing document {doc_id}: {str(e)}"
                     context.error(error_msg)
                     errors.append(error_msg)
                     continue
+        
+        context.log(f"📋 Found {len(docs_to_delete)} documents to delete")
+        
+        # Delete documents in parallel batches
+        import concurrent.futures
+        
+        def delete_document(doc_id):
+            """Delete a single document"""
+            try:
+                delete_url = f"{list_url}/{doc_id}"
+                delete_response = requests.delete(delete_url, headers=headers, timeout=30)
+                
+                if delete_response.status_code in [200, 204]:
+                    return ('success', doc_id)
+                elif delete_response.status_code == 404:
+                    return ('already_deleted', doc_id)
+                else:
+                    return ('error', doc_id, delete_response.status_code)
+            except Exception as e:
+                return ('exception', doc_id, str(e))
+        
+        # Delete in batches using thread pool
+        batch_size = 20  # Delete 20 at a time
+        context.log(f"🗑️  Starting batch deletion with {batch_size} workers...")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+            futures = {executor.submit(delete_document, doc_id): doc_id for doc_id in docs_to_delete}
+            
+            for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+                result = future.result()
+                
+                if result[0] == 'success':
+                    deleted_count += 1
+                    if deleted_count % 50 == 0:
+                        context.log(f"🗑️  Deleted {deleted_count}/{len(docs_to_delete)} old records...")
+                elif result[0] == 'already_deleted':
+                    # Count as deleted since it's already gone
+                    deleted_count += 1
+                elif result[0] == 'error':
+                    error_msg = f"Failed to delete {result[1]}: HTTP {result[2]}"
+                    context.error(error_msg)
+                    errors.append(error_msg)
+                else:  # exception
+                    error_msg = f"Exception deleting {result[1]}: {result[2]}"
+                    context.error(error_msg)
+                    errors.append(error_msg)
         
         # Generate summary
         summary = {
